@@ -1,4 +1,5 @@
 import os
+from copy import copy, deepcopy
 from typing import Optional
 import uvicorn
 from fastapi import FastAPI, File, Form, HTTPException, Depends, Body, UploadFile
@@ -122,15 +123,21 @@ async def query_main(
                 {
                     "role": "system",
                     "content": f"""
-                    You are highly motivated, proactive sales.
-                    Your task is to lead a user using for answers text below.
+                    You are a sales person who gives rich but pricese answers.
+                    Your task is to engage a customer into a product.
+                    You are able to use in answer the next text only.
                     {result.results[0].text}
                     """,
                 },
                 {"role": "user", "content": result.query},
             ]
             completion = get_chat_completion(messages)
-            result.results[0].text = completion
+            chatgpt_result = deepcopy(result.results[0])
+            chatgpt_result.text = completion
+            result.results = [
+                chatgpt_result,
+                result.results[0],
+            ]
         return QueryResponse(results=results)
     except Exception as e:
         logger.error(e)
