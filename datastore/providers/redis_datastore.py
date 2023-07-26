@@ -114,6 +114,11 @@ class RedisDataStore(DataStore):
                 as_name="embedding",
             ),
         }
+        await cls._init_index(client, redisearch_schema)
+        return cls(client, redisearch_schema)
+
+    @staticmethod
+    async def _init_index(client, redisearch_schema):
         try:
             # Check for existence of RediSearch Index
             await client.ft(REDIS_INDEX_NAME).info()
@@ -129,7 +134,6 @@ class RedisDataStore(DataStore):
             await client.ft(REDIS_INDEX_NAME).create_index(
                 fields=fields, definition=definition
             )
-        return cls(client, redisearch_schema)
 
     @staticmethod
     def _redis_key(document_id: str, chunk_id: str) -> str:
@@ -351,6 +355,7 @@ class RedisDataStore(DataStore):
                 logger.info(f"Deleting all documents from index")
                 await self.client.ft(REDIS_INDEX_NAME).dropindex(True)
                 logger.info(f"Deleted all documents successfully")
+                await self._init_index(self.client, self._schema)
                 return True
             except Exception as e:
                 logger.error(f"Error deleting all documents: {e}")
