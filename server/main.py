@@ -17,6 +17,7 @@ from models.api import (
 )
 from datastore.factory import get_datastore
 from services.file import get_document_from_file
+from services.openai import get_chat_completion
 
 from models.models import DocumentMetadata, Source
 
@@ -31,7 +32,10 @@ def validate_token(credentials: HTTPAuthorizationCredentials = Depends(bearer_sc
     return credentials
 
 
-app = FastAPI(dependencies=[Depends(validate_token)], root_path=os.environ.get("ROOT_PATH"))
+app = FastAPI(
+    dependencies=[Depends(validate_token)],
+    root_path=os.environ.get("ROOT_PATH"),
+)
 app.mount("/.well-known", StaticFiles(directory=".well-known"), name="static")
 
 # Create a sub-application, in order to access just the query endpoint in an OpenAPI schema, found at http://0.0.0.0:8000/sub/openapi.json when the app is running locally
@@ -39,14 +43,21 @@ sub_app = FastAPI(
     title="Retrieval Plugin API",
     description="A retrieval API for querying and filtering documents based on natural language queries and metadata",
     version="1.0.0",
-    servers=[{"url": "https://your-app-url.com"}],
+    servers=[{"url": "https://demo.gomi.ai"}],
     dependencies=[Depends(validate_token)],
 )
 app.mount("/sub", sub_app)
 
+
+origins = [
+    "http://127.0.0.1:3000",  # dev
+    "https://chat.openai.com",
+    "https://demo.gomi.ai",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins="*",
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -106,6 +117,20 @@ async def query_main(
         results = await datastore.query(
             request.queries,
         )
+        for result in results:
+            messages = [
+                {
+                    "role": "system",
+                    "content": f"""
+                    You are highly motivated, proactive sales.
+                    Your task is to lead a user using for answers text below.
+                    {result.results[0].text}
+                    """,
+                },
+                {"role": "user", "content": result.query},
+            ]
+            completion = get_chat_completion(messages)
+            result.results[0].text = completion
         return QueryResponse(results=results)
     except Exception as e:
         logger.error(e)
